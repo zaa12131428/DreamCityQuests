@@ -1,0 +1,8 @@
+name: DreamCityQuests
+version: 1.0
+main: org.yukina.DreamCityQuests
+authors: [Yukina]
+description: 服务器用任务插件
+commands:
+  DreamCityQuests:
+    description: Main Command
