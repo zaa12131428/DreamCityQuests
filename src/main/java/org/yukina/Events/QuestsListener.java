@@ -29,7 +29,6 @@ import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 
 public class QuestsListener implements Listener {
 
@@ -44,10 +43,15 @@ public class QuestsListener implements Listener {
             while (true) {
                 try {
                     for (Player p : Bukkit.getOnlinePlayers()) {
-                        for (Quests q : QuestsUtils.playerMissions.get(p)) {
+                        if(QuestsUtils.playerMissions.get(p)==null) continue;
+                        YamlConfiguration yml = YamlConfiguration.loadConfiguration(FileUtils.config);
+                        if(!yml.getString("Date").equalsIgnoreCase(new SimpleDateFormat("MMdd").format(new Date()))){
+                            QuestsUtils.refreshMission(p,3);
+                        }
 
+                        for (Quests q : QuestsUtils.playerMissions.get(p)) {
                             if (q.getType() == QUESTSTYPE.ITEM) {
-                                if(p.getInventory().contains(q.getItem().getType(),q.getAmount())){
+                                if(p.getInventory().containsAtLeast(q.getItem(),q.getAmount())){
                                     if(!QuestsUtils.checkPlayerMission(p,q.getName())){
                                         QuestsUtils.setPlayerMissionComplete(p,q);
                                     }else{
@@ -56,6 +60,7 @@ public class QuestsListener implements Listener {
                                 }
                             }
                         }
+
 
                     }
                     Thread.sleep(50);
@@ -75,23 +80,22 @@ public class QuestsListener implements Listener {
                 event.setCancelled(true);
                 Player p = (Player) event.getWhoClicked();
                 ItemStack i = event.getCurrentItem();
-
                 if (i != null && i.getType() != Material.AIR) {
 
-                    if(i.getItemMeta().getDisplayName().contains("每日任务")){
-                        if(event.getAction() == InventoryAction.PICKUP_HALF){
+                    if(i.getItemMeta().getDisplayName().contains("每日任务")) {
+                        if (event.getAction() == InventoryAction.PICKUP_HALF) {
                             int index = Integer.parseInt(i.getItemMeta().getDisplayName().split(":")[0]);
-                            QuestsUtils.refreshMission((Player) event.getWhoClicked(),index);
-                        }
-                        if(event.getAction() == InventoryAction.PICKUP_ALL){
-
+                            if (!QuestsUtils.checkPlayerMission((Player) event.getWhoClicked(), i.getItemMeta().getDisplayName().split("e")[1])) {
+                                QuestsUtils.refreshMission((Player) event.getWhoClicked(), index);
+                            }else {
+                                System.out.println("NO");
+                            }
                         }
                     }
 
                     if (i.getItemMeta().getDisplayName().contains("§6日")) {
                         String currentDay = new SimpleDateFormat("dd").format(new Date());
                         String day = i.getItemMeta().getDisplayName().split("-")[1];
-
                         if (currentDay.equalsIgnoreCase(day)) {
                             File file = FileUtils.getPlayerData(p);
                             YamlConfiguration data = YamlConfiguration.loadConfiguration(file);
@@ -110,9 +114,9 @@ public class QuestsListener implements Listener {
                                                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd.replace("%player%", p.getName()));
                                             }
                                         }
+                                    }else{
+                                        p.sendMessage(DreamCityQuests.PREFIX+" §c你不是枫叶通行证玩家,仅可以领取普通玩家奖励哦！");
                                     }
-                                }else{
-                                    p.sendMessage(DreamCityQuests.PREFIX+" §c你不是枫叶通行证玩家,仅可以领取普通玩家奖励哦！");
                                 }
                                 if(i.getItemMeta().getLore().get(0).contains("普通")) {
                                     for (int t = 2 ; t < FileUtils.settings.getStringList("n" + day).size(); t++) {
@@ -155,7 +159,6 @@ public class QuestsListener implements Listener {
                             amount += 1;
                             data.set(q.getType().getName() + q.getBlockType(), amount);
                             data.save(file);
-
                             if (amount >= q.getAmount()) {
                                 QuestsUtils.setPlayerMissionComplete(player, q);
                             }
@@ -174,8 +177,8 @@ public class QuestsListener implements Listener {
 
     @EventHandler
     public void onPlayerKillEntity(EntityDeathEvent event) {
-        if(!(event.getEntity() instanceof Player)) return;
-        for (Quests q : QuestsUtils.playerMissions.get(event.getEntity())) {
+        if (!(event.getEntity().getKiller() instanceof Player)) return;
+        for (Quests q : QuestsUtils.playerMissions.get(event.getEntity().getKiller())) {
 
             if (q.getType() == QUESTSTYPE.KILL) {
 
@@ -183,22 +186,21 @@ public class QuestsListener implements Listener {
                 Player player = event.getEntity().getKiller();
 
                 if (entity.getType() != q.getEntity()) break;
-
                 try {
                     File file = FileUtils.getPlayerData(player);
                     YamlConfiguration data = YamlConfiguration.loadConfiguration(file);
 
                     if (!QuestsUtils.checkPlayerMission(player, q.getName())) {
-                        if (data.get(q.getType() + q.getEntity().toString()) != null) {
+                        if (data.get(q.getType().getName() + q.getEntity().toString()) != null) {
                             int amount = data.getInt(q.getType().getName() + q.getEntity().toString());
                             amount += 1;
-                            data.set(q.getType() + q.getEntity().toString(), amount);
+                            data.set(q.getType().getName() + q.getEntity().toString(), amount);
                             data.save(file);
                             if (amount >= q.getAmount()) {
                                 QuestsUtils.setPlayerMissionComplete(player, q);
                             }
                         } else {
-                            data.set(q.getType() + q.getEntity().toString(), 1);
+                            data.set(q.getType().getName() + q.getEntity().toString(), 1);
                             data.save(file);
                         }
                     }
@@ -216,7 +218,16 @@ public class QuestsListener implements Listener {
         new Thread(()->{
             if(!FileUtils.playerDataCotainsPlayer(player)){
                 FileUtils.createPlayerData(player);
-                QuestsUtils.resetPlayerData(player,dataFolder,new SimpleDateFormat("dd").format(new Date()));
+                if(YamlConfiguration.loadConfiguration(FileUtils.getPlayerData(player)).getString("Date") == null){
+                    QuestsUtils.resetPlayerData(player, FileUtils.getPlayerData(player), new SimpleDateFormat("dd").format(new Date()));
+                    return;
+                }
+
+                if(!YamlConfiguration.loadConfiguration(FileUtils.getPlayerData(player)).getString("Date").equalsIgnoreCase(new SimpleDateFormat("dd").format(new Date()))) {
+                    QuestsUtils.resetPlayerData(player, FileUtils.getPlayerData(player), new SimpleDateFormat("dd").format(new Date()));
+                }else {
+                    QuestsUtils.loadPlayerMission(player);
+                }
             }
         }).start();
     }

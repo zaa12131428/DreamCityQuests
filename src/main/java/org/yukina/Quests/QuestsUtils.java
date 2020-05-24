@@ -47,7 +47,16 @@ public class QuestsUtils {
                 int amount = FileUtils.settings.getInt("Quests."+i+".Amount");
                 quests = new Quests(questsName,questsType,entityType,amount,description);
             }else if(questsType == QUESTSTYPE.ITEM){
-                ItemStack item = new ItemStack(FileUtils.settings.getInt("Quests."+i+".Item"));
+                int itemId = 0,value = 0;
+                ItemStack item = null;
+                if(FileUtils.settings.getString("Quests."+i+".Item").contains(":")) {
+                    itemId = Integer.parseInt(FileUtils.settings.getString("Quests." + i + ".Item").split(":")[0]);
+                    value = Integer.parseInt(FileUtils.settings.getString("Quests." + i + ".Item").split(":")[1]);
+                    item = new ItemStack(itemId,1,(short) 1,(byte)value);
+                }else{
+                    itemId = Integer.parseInt(FileUtils.settings.getString("Quests." + i + ".Item"));
+                    item = new ItemStack(itemId);
+                }
                 int amount = FileUtils.settings.getInt("Quests."+i+".Amount");
                 quests = new Quests(questsName,questsType,item,amount,description);
             }else if(questsType == QUESTSTYPE.DIG){
@@ -143,7 +152,7 @@ public class QuestsUtils {
             File file = FileUtils.getPlayerData(p);
             YamlConfiguration data = YamlConfiguration.loadConfiguration(file);
             List<String> l = new ArrayList<>();
-            p.sendTitle("§b[§6每日任务§b]", "§a任务 §8> §b" + q.getName() + " §a已完成!", 0, 60, 20);
+            p.sendTitle("§b[§6每日任务§b]", "§a任务 §8> §b" + q.getName() + " §a已完成!", 0, 80, 40);
             if (data.getStringList("CompleteMission") != null) {
                 l = data.getStringList("CompleteMission");
                 l.add(q.getName());
@@ -317,37 +326,36 @@ public class QuestsUtils {
         itemStacks.add(sixteen);
     }
 
-    public static void resetPlayerData(Player player, File dataFolder,String date){
-        for (File playerData : dataFolder.listFiles()) {
+    public static void resetPlayerData(Player player, File playerData, String date) {
+        try {
             YamlConfiguration playerYml = YamlConfiguration.loadConfiguration(playerData);
-            QuestsUtils.playerMissions.put(player,QuestsUtils.getRandomMission(3));
+            QuestsUtils.playerMissions.put(player, QuestsUtils.getRandomMission(3));
+            playerYml.set("Date", "0");
             if (!playerYml.getString("Date").equalsIgnoreCase(date)) {
-                playerYml.set("Date",date);
+                playerYml.set("Date", date);
                 playerYml.set("ALL", false);
-                List<String> t  = new ArrayList<>();
-                for(Quests q : playerMissions.get(player)) {
+                List<String> t = new ArrayList<>();
+                for (Quests q : playerMissions.get(player)) {
                     t.add(q.getName());
                 }
-                playerYml.set("PlayerMissions",t);
-                playerYml.set("CompleteMission",new ArrayList<>());
+                playerYml.set("PlayerMissions", t);
+                playerYml.set("CompleteMission", new ArrayList<>());
+                playerYml.save(playerData);
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-    }
-
-    public static File getPlayerData(Player player){
-        for(File file : DreamCityQuests.dataFolder.listFiles()){
-            if(file.getName().contains(player.getUniqueId().toString())){
-                return file;
-            }
-        }
-        return null;
     }
 
     public static List<Quests> getRandomMission(int amount){
         List<Quests> missions = new ArrayList<>();
-
-        for(int i = 0 ; i < amount ; i++){
-            missions.add(AllMission.get((int) (Math.random() * AllMission.size())));
+        int i = 0;
+        while (i < amount) {
+            Quests q = AllMission.get((int) (Math.random() * AllMission.size()));
+            if (!missions.contains(q)) {
+                missions.add(q);
+                i++;
+            }
         }
         return missions;
     }
@@ -356,7 +364,7 @@ public class QuestsUtils {
         if(playerMissions.containsKey(player)){
             try {
                 List<Quests> q = playerMissions.get(player);
-                File yml = getPlayerData(player);
+                File yml = FileUtils.getPlayerData(player);
                 YamlConfiguration playerData = YamlConfiguration.loadConfiguration(yml);
 
                 List<String> missions = playerData.getStringList("PlayerMissions");
@@ -368,11 +376,29 @@ public class QuestsUtils {
                 Quests quests = mis.get(0);
                 q.add(quests);
                 missions.add(quests.getName());
+                playerMissions.remove(player);
+                playerMissions.put(player,q);
                 playerData.set("PlayerMissions", missions);
                 playerData.save(yml);
             }catch (IOException e){
                 e.printStackTrace();
             }
         }
+    }
+
+    public static void loadPlayerMission(Player player){
+        YamlConfiguration yml = YamlConfiguration.loadConfiguration(FileUtils.getPlayerData(player));
+        List<Quests> quests = new ArrayList<>();
+        for(String mission : yml.getStringList("PlayerMissions")){
+            quests.add(getQuests(mission));
+        }
+        playerMissions.put(player,quests);
+    }
+
+    public static Quests getQuests(String name){
+        for(Quests q : AllMission){
+            if(q.getName().contains(name)) return q;
+        }
+        return null;
     }
 }
